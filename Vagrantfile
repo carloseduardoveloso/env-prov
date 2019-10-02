@@ -1,38 +1,76 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-#DefaultsConfigs
+
+#defaultsvmsconfigs
 Vagrant.configure("2") do |config|
-  config.vm.box = "centos/7"
-  config.vm.box_check_update = true
+  config.vm.box = "ubuntu/bionic64"
+  #config.vm.box_check_update = true
+  #config.vbguest.auto_update = true
   config.vm.provider "virtualbox" do |config|
     config.memory = 512
-    config.cpus = 1
-    config.gui = false
-
+    config.cpus = 2
+    #config.gui = false
+        
   end
   
-  #MysqlVM
+  #apt-cacher-ng-vm
+  
+  $cacher = <<-SCRIPT
+  #!/usr/bin/env bash
+  sudo apt update -y
+  sudo apt upgrade -y
+  sudo apt install -y apt-cacher-ng
+  sudo ufw allow 3142/tcp 
+  sudo ufw reload
+  sudo systemctl status apt-cacher-ng
+  SCRIPT
+
+  config.vm.define "cacher" do |host|
+    host.vm.hostname = "cacher"
+    host.vm.network "public_network", use_dhcp_assigned_default_route: true, bridge: "enp7s0"
+    #host.vm.network "public_network", bridge: "enp7s0", auto_config: true
+    #config.vm.provision "shell",
+    #  run: "always",
+    #  inline: "ifconfig eth1 10.2.0.31 netmask 255.255.240.0 up"
+    #  inline: "route add default gw 10.2.0.1"
+    #end
+    host.vm.provision "shell", inline: $cacher
+        
+  end
+
+  #mysql-vm
+ 
+  $mysql = <<-SCRIPT
+  #!/usr/bin/env bash
+  sudo touch /etc/apt/apt.conf.d/00aptproxy
+  echo "Acquire::http::Proxy "http://10.2.6.74:3142";" > /etc/apt/apt.conf.d/00aptproxy 
+  sudo apt update -y
+  sudo apt upgrade -y
+  sudo apt install -y mysql-server-5.7 python3-mysqldb
+  sudo ufw allow 3306/tcp 
+  sudo ufw reload
+  sed -i "s/^bind-address.*127.0.0.1/bind-address=0.0.0.0/" /etc/mysql/my.cnf
+  sudo systemctl restart mysql
+  sudo systemctl status mysql
+  SCRIPT
+  
   config.vm.define "mysql" do |mysql|
     mysql.vm.provider "virtualbox" do |config|
-      config.name = "Mysql"
+      config.name = "mysql"
       config.memory = 2048
       config.cpus = 2
     end
-    mysql.vm.network "public_network", ip: "dhcp", bridge: "enp7s0"
-    mysql.vm.provision "shell", inline: "sudo systemctl stop firewalld && sudo systemctl disable firewalld"
-    mysql.vm.provision "shell", inline: "yum update -y && yum upgrade -y && yum install -y vim htop wget build-essential g++ git"
-    # internet
-    mysql.vm.network :forwarded_port, guest: 8080, host: 8080
-    # node debugging with VS Code
-    mysql.vm.network :forwarded_port, host: 5858, guest: 5858
-    # mysql
-    mysql.vm.network :forwarded_port, guest: 3306, host: 3306
+    
+    mysql.vm.network "public_network", use_dhcp_assigned_default_route: true, bridge: "enp7s0"
+    mysql.vm.provision "shell", inline: $mysql
+    
+                
   end
 
-  #AnsibleVM
+  #ansible-vm
   config.vm.define "ansible" do |ansible|
     ansible.vm.provider "virtualbox" do |config|
-      config.name = "Ansible"
+      config.name = "ansible"
       config.memory = 2048
       config.cpus = 2
     end
@@ -41,10 +79,10 @@ Vagrant.configure("2") do |config|
     ansible.vm.provision "shell", inline: "sudo systemctl stop firewalld && sudo systemctl disable firewalld"
   end
   
-  #DockerVM
+  #docker-vm
   config.vm.define "docker" do |docker|
     docker.vm.provider "virtualbox" do |config|
-      config.name = "Docker"
+      config.name = "docker"
       config.memory = 2048
       config.cpus = 2
     end
