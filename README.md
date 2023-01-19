@@ -1,1 +1,1 @@
-Criacao rapida de um abiente para testes
+Criacao rapida de um ambiente para testes
